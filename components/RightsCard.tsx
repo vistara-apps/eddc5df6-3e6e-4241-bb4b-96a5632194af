@@ -1,173 +1,119 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Share2, ExternalLink, CheckCircle } from 'lucide-react';
-import { RightsCard as RightsCardType, GeneratedContent } from '@/lib/types';
-import { copyToClipboard, generateShareableURL } from '@/lib/utils';
+import { Copy, Share2, ExternalLink } from 'lucide-react';
+import { RightsCard as RightsCardType } from '@/lib/types';
+import { copyToClipboard } from '@/lib/utils';
 
 interface RightsCardProps {
-  card?: RightsCardType;
-  content?: GeneratedContent;
-  state: string;
-  interactionType: string;
+  card: RightsCardType;
   variant?: 'default' | 'shareable';
-  onShare?: () => void;
 }
 
-export function RightsCard({ 
-  card, 
-  content, 
-  state, 
-  interactionType, 
-  variant = 'default',
-  onShare 
-}: RightsCardProps) {
-  const [copied, setCopied] = useState<string | null>(null);
+export function RightsCard({ card, variant = 'default' }: RightsCardProps) {
+  const [copied, setCopied] = useState(false);
 
-  const handleCopy = async (text: string, type: string) => {
+  const handleCopyScript = async () => {
     try {
-      await copyToClipboard(text);
-      setCopied(type);
-      setTimeout(() => setCopied(null), 2000);
+      await copyToClipboard(card.script);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy:', error);
+      console.error('Failed to copy script:', error);
     }
   };
 
-  const handleShare = () => {
-    if (card) {
-      const shareURL = generateShareableURL(card.cardId);
-      if (navigator.share) {
-        navigator.share({
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
           title: card.title,
-          text: `Know your rights: ${card.title}`,
-          url: shareURL,
+          text: `${card.content}\n\nScript: ${card.script}`,
+          url: card.sharingURL || window.location.href,
         });
-      } else {
-        copyToClipboard(shareURL);
+      } catch (error) {
+        console.error('Error sharing:', error);
       }
+    } else {
+      // Fallback to copying URL
+      await copyToClipboard(card.sharingURL || window.location.href);
     }
-    onShare?.();
-  };
-
-  const displayContent = content || {
-    rights: card?.content.split('\n') || [],
-    script: card?.script || '',
-    tips: [],
-    warnings: []
   };
 
   return (
-    <div className="glass-card p-6 space-y-6">
+    <div className={`card-content ${variant === 'shareable' ? 'border-2 border-accent' : ''}`}>
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-textPrimary mb-1">
-            {card?.title || `${interactionType.replace('-', ' ')} Rights`}
-          </h2>
-          <p className="text-sm text-textSecondary">
-            {state} • {interactionType.replace('-', ' ')}
-          </p>
+        <div className="flex-1">
+          <h3 className="text-xl font-semibold text-textPrimary mb-2">
+            {card.title}
+          </h3>
+          <div className="flex items-center space-x-2 text-sm text-textSecondary">
+            <span>{card.state}</span>
+            <span>•</span>
+            <span>{card.interactionType.replace('-', ' ')}</span>
+          </div>
         </div>
         
         {variant === 'shareable' && (
           <button
             onClick={handleShare}
-            className="p-2 rounded-md hover:bg-surface transition-colors duration-200"
+            className="p-2 text-textSecondary hover:text-accent transition-colors duration-200"
           >
-            <Share2 className="h-5 w-5 text-accent" />
+            <Share2 className="w-5 h-5" />
           </button>
         )}
       </div>
 
-      {/* Your Rights */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-medium text-textPrimary">Your Rights</h3>
-        <div className="space-y-2">
-          {displayContent.rights.map((right, index) => (
-            <div key={index} className="flex items-start space-x-2">
-              <CheckCircle className="h-4 w-4 text-accent mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-textSecondary">{right}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* What to Say */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium text-textPrimary">What to Say</h3>
-          <button
-            onClick={() => handleCopy(displayContent.script, 'script')}
-            className="flex items-center space-x-1 text-accent hover:text-accent/80 transition-colors duration-200"
-          >
-            {copied === 'script' ? (
-              <CheckCircle className="h-4 w-4" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-            <span className="text-sm">Copy</span>
-          </button>
-        </div>
-        <div className="bg-primary p-4 rounded-md border border-gray-600">
-          <p className="text-sm font-medium text-textPrimary leading-relaxed">
-            "{displayContent.script}"
+      {/* Content */}
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-base font-medium text-textPrimary mb-2">
+            Your Rights:
+          </h4>
+          <p className="text-base leading-6 text-textSecondary">
+            {card.content}
           </p>
         </div>
-      </div>
 
-      {/* Tips */}
-      {displayContent.tips.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-medium text-textPrimary">Safety Tips</h3>
-          <div className="space-y-2">
-            {displayContent.tips.map((tip, index) => (
-              <div key={index} className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-accent rounded-full mt-2 flex-shrink-0" />
-                <p className="text-sm text-textSecondary">{tip}</p>
-              </div>
-            ))}
+        {/* Script */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-base font-medium text-textPrimary">
+              What to Say:
+            </h4>
+            <button
+              onClick={handleCopyScript}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors duration-200 ${
+                copied 
+                  ? 'bg-accent/20 text-accent' 
+                  : 'bg-primary/50 text-textSecondary hover:text-textPrimary'
+              }`}
+            >
+              <Copy className="w-4 h-4" />
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
+          </div>
+          <div className="script-text">
+            "{card.script}"
           </div>
         </div>
-      )}
 
-      {/* Warnings */}
-      {displayContent.warnings.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-medium text-danger">Important Warnings</h3>
-          <div className="space-y-2">
-            {displayContent.warnings.map((warning, index) => (
-              <div key={index} className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-danger rounded-full mt-2 flex-shrink-0" />
-                <p className="text-sm text-textSecondary">{warning}</p>
-              </div>
-            ))}
+        {/* Additional Resources */}
+        {card.linkToFullLaw && (
+          <div className="pt-2 border-t border-gray-700">
+            <a
+              href={card.linkToFullLaw}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 text-accent hover:text-accent/80 transition-colors duration-200"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="text-sm">View Full Legal Text</span>
+            </a>
           </div>
-        </div>
-      )}
-
-      {/* Legal Disclaimer */}
-      <div className="border-t border-gray-700 pt-4">
-        <p className="text-xs text-textSecondary">
-          This information is for educational purposes only and does not constitute legal advice. 
-          Laws may vary by jurisdiction. Consult with a qualified attorney for specific legal guidance.
-        </p>
+        )}
       </div>
-
-      {/* External Link */}
-      {card?.linkToFullLaw && (
-        <div className="flex items-center justify-center">
-          <a
-            href={card.linkToFullLaw}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center space-x-2 text-accent hover:text-accent/80 transition-colors duration-200"
-          >
-            <ExternalLink className="h-4 w-4" />
-            <span className="text-sm">View Full Legal Text</span>
-          </a>
-        </div>
-      )}
     </div>
   );
 }

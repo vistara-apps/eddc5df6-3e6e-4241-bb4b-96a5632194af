@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { GeneratedContent, InteractionType } from './types';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || '',
@@ -9,33 +8,25 @@ const openai = new OpenAI({
 
 export async function generateRightsContent(
   state: string,
-  interactionType: InteractionType
-): Promise<GeneratedContent> {
+  interactionType: string
+): Promise<{ content: string; script: string }> {
   try {
-    const prompt = `Generate comprehensive rights information for a ${interactionType.replace('-', ' ')} in ${state}. 
-
-Please provide:
-1. A list of specific constitutional rights that apply
-2. A clear, calm script for what to say to police
-3. Important tips for staying safe during the interaction
-4. Critical warnings about what NOT to do
-
-Format the response as JSON with the following structure:
-{
-  "rights": ["right 1", "right 2", ...],
-  "script": "What to say to the officer...",
-  "tips": ["tip 1", "tip 2", ...],
-  "warnings": ["warning 1", "warning 2", ...]
-}
-
-Keep language clear, concise, and legally accurate for ${state} state law.`;
+    const prompt = `Generate specific legal rights information and a script for a ${interactionType} in ${state}. 
+    
+    Please provide:
+    1. A concise summary of relevant rights (2-3 sentences)
+    2. A short, practical script the person can use (1-2 sentences)
+    
+    Focus on constitutional rights and state-specific laws. Keep it practical and easy to remember under stress.
+    
+    Format as JSON with "content" and "script" fields.`;
 
     const completion = await openai.chat.completions.create({
       model: 'google/gemini-2.0-flash-001',
       messages: [
         {
           role: 'system',
-          content: 'You are a legal expert specializing in constitutional rights and police interactions. Provide accurate, state-specific legal information.'
+          content: 'You are a legal rights expert who provides accurate, practical advice for police encounters. Always emphasize constitutional rights and de-escalation.'
         },
         {
           role: 'user',
@@ -43,39 +34,61 @@ Keep language clear, concise, and legally accurate for ${state} state law.`;
         }
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 500
     });
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No content generated');
+    const response = completion.choices[0]?.message?.content;
+    if (!response) {
+      throw new Error('No response from OpenAI');
     }
 
-    return JSON.parse(content) as GeneratedContent;
+    try {
+      const parsed = JSON.parse(response);
+      return {
+        content: parsed.content || 'Rights information not available.',
+        script: parsed.script || 'I am exercising my right to remain silent.'
+      };
+    } catch (parseError) {
+      // Fallback if JSON parsing fails
+      return {
+        content: response.split('\n')[0] || 'Rights information not available.',
+        script: 'I am exercising my right to remain silent.'
+      };
+    }
   } catch (error) {
     console.error('Error generating rights content:', error);
-    
-    // Fallback content
     return {
-      rights: [
-        'You have the right to remain silent',
-        'You have the right to refuse searches without a warrant',
-        'You have the right to ask if you are free to go',
-        'You have the right to record the interaction'
-      ],
-      script: "Officer, I'm exercising my right to remain silent. I do not consent to any searches. Am I free to go?",
-      tips: [
-        'Stay calm and keep your hands visible',
-        'Do not argue or resist physically',
-        'Ask for a lawyer if arrested',
-        'Remember details for later'
-      ],
-      warnings: [
-        'Do not run or make sudden movements',
-        'Do not lie or provide false information',
-        'Do not consent to searches',
-        'Do not sign anything without a lawyer'
-      ]
+      content: 'Unable to generate specific rights information at this time.',
+      script: 'I am exercising my right to remain silent.'
     };
+  }
+}
+
+export async function generateEducationalContent(topic: string): Promise<string> {
+  try {
+    const prompt = `Provide educational content about ${topic} in police encounters. 
+    Keep it concise, practical, and focused on constitutional rights and safety.
+    Limit to 3-4 key points in simple language.`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'google/gemini-2.0-flash-001',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an educational content creator focused on civil rights and police encounter safety.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 300
+    });
+
+    return completion.choices[0]?.message?.content || 'Educational content not available.';
+  } catch (error) {
+    console.error('Error generating educational content:', error);
+    return 'Educational content not available at this time.';
   }
 }

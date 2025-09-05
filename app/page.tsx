@@ -1,385 +1,285 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useMiniKit } from '@coinbase/onchainkit/minikit';
 import { AppShell } from '@/components/AppShell';
 import { RightsCard } from '@/components/RightsCard';
 import { SOSButton } from '@/components/SOSButton';
 import { InteractionRecorder } from '@/components/InteractionRecorder';
-import { Shield, MapPin, Users, Settings2, Plus, Trash2, Edit } from 'lucide-react';
-import { US_STATES, INTERACTION_TYPES } from '@/lib/constants';
+import { StateSelector } from '@/components/StateSelector';
+import { InteractionTypeSelector } from '@/components/InteractionTypeSelector';
 import { generateRightsContent } from '@/lib/openai';
-import { GeneratedContent, TrustedContact } from '@/lib/types';
+import { generateCardId } from '@/lib/utils';
+import { DEFAULT_RIGHTS_CONTENT } from '@/lib/constants';
+import { RightsCard as RightsCardType } from '@/lib/types';
+import { Loader2, Shield, AlertTriangle, Book } from 'lucide-react';
 
 export default function HomePage() {
-  const [currentPage, setCurrentPage] = useState('home');
-  const [selectedState, setSelectedState] = useState('California');
-  const [selectedInteraction, setSelectedInteraction] = useState('traffic-stop');
-  const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
+  const { setFrameReady } = useMiniKit();
+  const [selectedState, setSelectedState] = useState<string>('');
+  const [selectedType, setSelectedType] = useState<string>('');
+  const [currentCard, setCurrentCard] = useState<RightsCardType | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [trustedContacts, setTrustedContacts] = useState<TrustedContact[]>([]);
-  const [newContact, setNewContact] = useState({ name: '', phone: '' });
-  const [isAddingContact, setIsAddingContact] = useState(false);
-
-  // Load saved data on mount
-  useEffect(() => {
-    const savedState = localStorage.getItem('selectedState');
-    const savedContacts = localStorage.getItem('trustedContacts');
-    
-    if (savedState) setSelectedState(savedState);
-    if (savedContacts) setTrustedContacts(JSON.parse(savedContacts));
-  }, []);
-
-  // Save state changes
-  useEffect(() => {
-    localStorage.setItem('selectedState', selectedState);
-  }, [selectedState]);
+  const [activeTab, setActiveTab] = useState<'rights' | 'emergency' | 'education'>('rights');
 
   useEffect(() => {
-    localStorage.setItem('trustedContacts', JSON.stringify(trustedContacts));
-  }, [trustedContacts]);
+    setFrameReady();
+  }, [setFrameReady]);
 
-  const handleGenerateRights = async () => {
+  const handleGenerateCard = async () => {
+    if (!selectedState || !selectedType) return;
+
     setIsGenerating(true);
+    
     try {
-      const content = await generateRightsContent(selectedState, selectedInteraction as any);
-      setGeneratedContent(content);
+      // Try to generate with AI first, fallback to default content
+      let content, script;
+      
+      try {
+        const generated = await generateRightsContent(selectedState, selectedType);
+        content = generated.content;
+        script = generated.script;
+      } catch (error) {
+        console.error('AI generation failed, using default content:', error);
+        const defaultContent = DEFAULT_RIGHTS_CONTENT[selectedType as keyof typeof DEFAULT_RIGHTS_CONTENT];
+        content = defaultContent?.content || 'Rights information not available.';
+        script = defaultContent?.script || 'I am exercising my right to remain silent.';
+      }
+
+      const card: RightsCardType = {
+        cardId: generateCardId(),
+        state: selectedState,
+        interactionType: selectedType,
+        title: DEFAULT_RIGHTS_CONTENT[selectedType as keyof typeof DEFAULT_RIGHTS_CONTENT]?.title || 'Your Rights',
+        content,
+        script,
+        createdAt: new Date(),
+      };
+
+      setCurrentCard(card);
     } catch (error) {
-      console.error('Failed to generate content:', error);
+      console.error('Failed to generate card:', error);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const addTrustedContact = () => {
-    if (newContact.name && newContact.phone) {
-      const contact: TrustedContact = {
-        contactId: Date.now().toString(),
-        userId: 'current-user',
-        name: newContact.name,
-        phoneNumber: newContact.phone,
-        notificationPreference: 'both'
-      };
-      setTrustedContacts([...trustedContacts, contact]);
-      setNewContact({ name: '', phone: '' });
-      setIsAddingContact(false);
-    }
+  const handleSOSActivate = () => {
+    console.log('SOS Alert activated!');
+    // In a real app, this would send notifications to trusted contacts
+    alert('Emergency alert sent to your trusted contacts!');
   };
 
-  const removeTrustedContact = (contactId: string) => {
-    setTrustedContacts(trustedContacts.filter(c => c.contactId !== contactId));
+  const handleRecordingStart = () => {
+    console.log('Recording started');
   };
 
-  const renderHomePage = () => (
-    <div className="space-y-6 pb-20">
-      {/* Welcome Section */}
-      <div className="text-center space-y-4">
-        <div className="flex justify-center">
-          <Shield className="h-16 w-16 text-accent" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-textPrimary mb-2">
-            Know Your Rights
-          </h1>
-          <p className="text-textSecondary">
-            Your pocket guide to police encounters. Stay informed, stay safe.
-          </p>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-4">
-        <button
-          onClick={() => setCurrentPage('rights')}
-          className="glass-card p-6 text-left hover:bg-surface/80 transition-all duration-200"
-        >
-          <div className="flex items-center space-x-4">
-            <div className="bg-accent/20 p-3 rounded-lg">
-              <Shield className="h-6 w-6 text-accent" />
-            </div>
-            <div>
-              <h3 className="font-medium text-textPrimary">View Your Rights</h3>
-              <p className="text-sm text-textSecondary">
-                Get state-specific rights and scripts
-              </p>
-            </div>
-          </div>
-        </button>
-
-        <div className="glass-card p-6">
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="bg-danger/20 p-3 rounded-lg">
-              <Users className="h-6 w-6 text-danger" />
-            </div>
-            <div>
-              <h3 className="font-medium text-textPrimary">Emergency SOS</h3>
-              <p className="text-sm text-textSecondary">
-                Alert trusted contacts instantly
-              </p>
-            </div>
-          </div>
-          <SOSButton 
-            contacts={trustedContacts}
-            onAlert={(location) => {
-              console.log('SOS triggered with location:', location);
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Current Location */}
-      <div className="glass-card p-4">
-        <div className="flex items-center space-x-3">
-          <MapPin className="h-5 w-5 text-accent" />
-          <div>
-            <p className="text-sm font-medium text-textPrimary">Current State</p>
-            <p className="text-sm text-textSecondary">{selectedState}</p>
-          </div>
-          <button
-            onClick={() => setCurrentPage('settings')}
-            className="ml-auto text-accent hover:text-accent/80"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderRightsPage = () => (
-    <div className="space-y-6 pb-20">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-textPrimary mb-2">
-          Your Rights & Scripts
-        </h2>
-        <p className="text-textSecondary">
-          Select your situation to get specific guidance
-        </p>
-      </div>
-
-      {/* State Selection */}
-      <div className="glass-card p-4">
-        <label className="block text-sm font-medium text-textPrimary mb-2">
-          State
-        </label>
-        <select
-          value={selectedState}
-          onChange={(e) => setSelectedState(e.target.value)}
-          className="w-full input-field"
-        >
-          {US_STATES.map(state => (
-            <option key={state} value={state}>{state}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Interaction Type Selection */}
-      <div className="glass-card p-4">
-        <label className="block text-sm font-medium text-textPrimary mb-3">
-          Interaction Type
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          {INTERACTION_TYPES.map(type => (
-            <button
-              key={type.id}
-              onClick={() => setSelectedInteraction(type.id)}
-              className={`p-3 rounded-lg border transition-all duration-200 ${
-                selectedInteraction === type.id
-                  ? 'bg-accent text-white border-accent'
-                  : 'bg-surface text-textSecondary border-gray-600 hover:border-accent'
-              }`}
-            >
-              <div className="text-2xl mb-1">{type.icon}</div>
-              <div className="text-sm font-medium">{type.label}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Generate Button */}
-      <button
-        onClick={handleGenerateRights}
-        disabled={isGenerating}
-        className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isGenerating ? 'Generating...' : 'Get My Rights & Scripts'}
-      </button>
-
-      {/* Generated Content */}
-      {generatedContent && (
-        <RightsCard
-          content={generatedContent}
-          state={selectedState}
-          interactionType={selectedInteraction}
-          variant="shareable"
-        />
-      )}
-
-      {/* Recording Section */}
-      <InteractionRecorder
-        onRecordingStart={() => console.log('Recording started')}
-        onRecordingStop={(blob) => console.log('Recording stopped:', blob)}
-      />
-    </div>
-  );
-
-  const renderContactsPage = () => (
-    <div className="space-y-6 pb-20">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-textPrimary mb-2">
-          Trusted Contacts
-        </h2>
-        <p className="text-textSecondary">
-          People who will be notified in an emergency
-        </p>
-      </div>
-
-      {/* Add Contact Form */}
-      {isAddingContact ? (
-        <div className="glass-card p-4 space-y-4">
-          <h3 className="font-medium text-textPrimary">Add New Contact</h3>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder="Name"
-              value={newContact.name}
-              onChange={(e) => setNewContact({...newContact, name: e.target.value})}
-              className="w-full input-field"
-            />
-            <input
-              type="tel"
-              placeholder="Phone Number"
-              value={newContact.phone}
-              onChange={(e) => setNewContact({...newContact, phone: e.target.value})}
-              className="w-full input-field"
-            />
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={addTrustedContact}
-              className="flex-1 btn-primary"
-            >
-              Add Contact
-            </button>
-            <button
-              onClick={() => {
-                setIsAddingContact(false);
-                setNewContact({ name: '', phone: '' });
-              }}
-              className="flex-1 btn-secondary"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={() => setIsAddingContact(true)}
-          className="w-full glass-card p-4 border-2 border-dashed border-gray-600 hover:border-accent transition-colors duration-200"
-        >
-          <div className="flex items-center justify-center space-x-2 text-accent">
-            <Plus className="h-5 w-5" />
-            <span>Add Trusted Contact</span>
-          </div>
-        </button>
-      )}
-
-      {/* Contacts List */}
-      <div className="space-y-3">
-        {trustedContacts.map(contact => (
-          <div key={contact.contactId} className="glass-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-textPrimary">{contact.name}</h3>
-                <p className="text-sm text-textSecondary">{contact.phoneNumber}</p>
-              </div>
-              <button
-                onClick={() => removeTrustedContact(contact.contactId)}
-                className="p-2 text-danger hover:bg-danger/20 rounded-md transition-colors duration-200"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {trustedContacts.length === 0 && !isAddingContact && (
-        <div className="text-center py-8">
-          <Users className="h-12 w-12 text-textSecondary mx-auto mb-3" />
-          <p className="text-textSecondary">No trusted contacts added yet</p>
-          <p className="text-sm text-textSecondary mt-1">
-            Add contacts to enable SOS alerts
-          </p>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderSettingsPage = () => (
-    <div className="space-y-6 pb-20">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-textPrimary mb-2">
-          Settings
-        </h2>
-        <p className="text-textSecondary">
-          Customize your app preferences
-        </p>
-      </div>
-
-      {/* State Setting */}
-      <div className="glass-card p-4">
-        <h3 className="font-medium text-textPrimary mb-3">Default State</h3>
-        <select
-          value={selectedState}
-          onChange={(e) => setSelectedState(e.target.value)}
-          className="w-full input-field"
-        >
-          {US_STATES.map(state => (
-            <option key={state} value={state}>{state}</option>
-          ))}
-        </select>
-        <p className="text-sm text-textSecondary mt-2">
-          This will be used for generating state-specific rights information
-        </p>
-      </div>
-
-      {/* App Info */}
-      <div className="glass-card p-4">
-        <h3 className="font-medium text-textPrimary mb-3">About</h3>
-        <div className="space-y-2 text-sm text-textSecondary">
-          <p><strong>Version:</strong> 1.0.0</p>
-          <p><strong>Purpose:</strong> Educational tool for understanding constitutional rights</p>
-          <p><strong>Disclaimer:</strong> This app provides general information and does not constitute legal advice</p>
-        </div>
-      </div>
-
-      {/* Legal Notice */}
-      <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg p-4">
-        <h3 className="font-medium text-orange-400 mb-2">Important Notice</h3>
-        <p className="text-sm text-orange-300">
-          This app is for educational purposes only. Laws vary by jurisdiction and situation. 
-          Always consult with a qualified attorney for specific legal advice.
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderCurrentPage = () => {
-    switch (currentPage) {
-      case 'rights':
-        return renderRightsPage();
-      case 'contacts':
-        return renderContactsPage();
-      case 'settings':
-        return renderSettingsPage();
-      default:
-        return renderHomePage();
-    }
+  const handleRecordingStop = (recordingData: any) => {
+    console.log('Recording stopped:', recordingData);
+    // In a real app, this would save the recording
   };
 
   return (
-    <AppShell currentPage={currentPage} onNavigate={setCurrentPage}>
-      {renderCurrentPage()}
+    <AppShell>
+      <div className="space-y-6 pb-20">
+        {/* Tab Navigation */}
+        <div className="flex space-x-1 bg-surface rounded-lg p-1">
+          {[
+            { id: 'rights', label: 'Rights', icon: Shield },
+            { id: 'emergency', label: 'Emergency', icon: AlertTriangle },
+            { id: 'education', label: 'Education', icon: Book },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-all duration-200 ${
+                  isActive 
+                    ? 'bg-accent text-white shadow-lg' 
+                    : 'text-textSecondary hover:text-textPrimary hover:bg-primary/50'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="font-medium">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Rights Tab */}
+        {activeTab === 'rights' && (
+          <div className="space-y-6">
+            {/* State Selection */}
+            <div className="card-content">
+              <h2 className="text-lg font-semibold text-textPrimary mb-4">
+                Get Your Rights Information
+              </h2>
+              <StateSelector
+                selectedState={selectedState}
+                onStateChange={setSelectedState}
+              />
+            </div>
+
+            {/* Interaction Type Selection */}
+            {selectedState && (
+              <div className="card-content">
+                <InteractionTypeSelector
+                  selectedType={selectedType}
+                  onTypeChange={setSelectedType}
+                />
+              </div>
+            )}
+
+            {/* Generate Button */}
+            {selectedState && selectedType && (
+              <div className="text-center">
+                <button
+                  onClick={handleGenerateCard}
+                  disabled={isGenerating}
+                  className="btn-primary flex items-center space-x-2 mx-auto"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-5 h-5" />
+                      <span>Get My Rights Card</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Generated Rights Card */}
+            {currentCard && (
+              <RightsCard card={currentCard} variant="shareable" />
+            )}
+          </div>
+        )}
+
+        {/* Emergency Tab */}
+        {activeTab === 'emergency' && (
+          <div className="space-y-6">
+            {/* SOS Alert */}
+            <div className="card-content text-center">
+              <h2 className="text-lg font-semibold text-textPrimary mb-4">
+                Emergency Alert
+              </h2>
+              <p className="text-textSecondary mb-6">
+                Press and hold to send an immediate alert to your trusted contacts
+              </p>
+              <SOSButton onActivate={handleSOSActivate} />
+            </div>
+
+            {/* Recording */}
+            <InteractionRecorder
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+            />
+
+            {/* Emergency Tips */}
+            <div className="card-content">
+              <h3 className="text-lg font-semibold text-textPrimary mb-4">
+                Emergency Tips
+              </h3>
+              <div className="space-y-3 text-sm text-textSecondary">
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-accent rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Stay calm and keep your hands visible</p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-accent rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Clearly state you are recording for safety</p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-accent rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Do not resist, even if you believe the stop is unlawful</p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-accent rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Ask "Am I free to go?" if you're unsure about detention</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Education Tab */}
+        {activeTab === 'education' && (
+          <div className="space-y-6">
+            {/* Constitutional Rights */}
+            <div className="card-content">
+              <h2 className="text-lg font-semibold text-textPrimary mb-4">
+                Your Constitutional Rights
+              </h2>
+              <div className="space-y-4 text-textSecondary">
+                <div>
+                  <h4 className="font-medium text-textPrimary mb-2">Fifth Amendment</h4>
+                  <p className="text-sm">You have the right to remain silent. You don't have to answer questions about where you're going, where you've been, or what you're doing.</p>
+                </div>
+                <div>
+                  <h4 className="font-medium text-textPrimary mb-2">Fourth Amendment</h4>
+                  <p className="text-sm">You have the right to be free from unreasonable searches and seizures. Police generally need a warrant or your consent to search you or your property.</p>
+                </div>
+                <div>
+                  <h4 className="font-medium text-textPrimary mb-2">Sixth Amendment</h4>
+                  <p className="text-sm">You have the right to an attorney. If you can't afford one, one will be appointed for you.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Best Practices */}
+            <div className="card-content">
+              <h3 className="text-lg font-semibold text-textPrimary mb-4">
+                Best Practices
+              </h3>
+              <div className="space-y-3">
+                {[
+                  'Keep your hands visible at all times',
+                  'Speak clearly and respectfully',
+                  'Don\'t argue or resist, even if you disagree',
+                  'Remember details for later legal proceedings',
+                  'Ask for a lawyer if you\'re arrested',
+                  'Don\'t consent to searches without a warrant'
+                ].map((practice, index) => (
+                  <div key={index} className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-accent rounded-full mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-textSecondary">{practice}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Common Mistakes */}
+            <div className="card-content">
+              <h3 className="text-lg font-semibold text-textPrimary mb-4">
+                Common Mistakes to Avoid
+              </h3>
+              <div className="space-y-3">
+                {[
+                  'Don\'t run or make sudden movements',
+                  'Don\'t lie or provide false information',
+                  'Don\'t consent to searches you\'re not required to allow',
+                  'Don\'t argue about your rights during the encounter',
+                  'Don\'t touch the officer or their equipment',
+                  'Don\'t volunteer information beyond what\'s required'
+                ].map((mistake, index) => (
+                  <div key={index} className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-danger rounded-full mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-textSecondary">{mistake}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }

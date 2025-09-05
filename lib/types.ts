@@ -3,7 +3,6 @@ export interface User {
   walletAddress?: string;
   darkModeEnabled: boolean;
   preferredLanguage: string;
-  currentState?: string;
 }
 
 export interface RightsCard {
@@ -35,11 +34,14 @@ export interface InteractionLog {
   notes?: string;
 }
 
-export type InteractionType = 'traffic-stop' | 'home-visit' | 'street-encounter' | 'arrest';
+export interface InteractionType {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
 
-export interface GeneratedContent {
-  rights: string[];
-  script: string;
-  tips: string[];
-  warnings: string[];
+export interface USState {
+  code: string;
+  name: string;
 }
